@@ -19,7 +19,7 @@ const PaymentModal = ({ isOpen, onClose, boarders, expenses, onSave }) => {
     onClose();
     onSave(); 
     try {
-      const { error } = await supabase.rpc('record_payment_v2', { p_boarder_id: formData.boarder_id, p_amount: parseFloat(formData.amount), p_method: formData.method, p_expense_id: formData.expense_id || null });
+      const { error } = await supabase.rpc('record_payment_v3', { p_boarder_id: formData.boarder_id, p_amount: parseFloat(formData.amount), p_method: formData.method, p_expense_id: formData.expense_id || null });
       if (error) throw error;
       showToast(`Payment for ${resident?.name} synced`, "success");
     } catch (err) { showToast(err.message, "error"); onSave(); }

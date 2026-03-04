@@ -9,6 +9,7 @@ CREATE TABLE profiles (
   role TEXT CHECK (role IN ('Admin', 'TopMan', 'Boarder')) DEFAULT 'Boarder',
   manual_debt NUMERIC DEFAULT 0,
   manual_debt_date TIMESTAMPTZ DEFAULT NOW(),
+  balance NUMERIC DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -35,8 +36,74 @@ CREATE TABLE payments (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. ATOMIC PAYMENT FUNCTION
-CREATE OR REPLACE FUNCTION record_payment_v2(
+-- 5. BALANCE MAINTENANCE FUNCTIONS
+CREATE OR REPLACE FUNCTION update_boarder_balance() RETURNS TRIGGER AS $$
+DECLARE
+    v_boarder_id UUID;
+    v_manual_debt NUMERIC;
+    v_total_expenses NUMERIC;
+    v_total_payments NUMERIC;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        v_boarder_id := OLD.boarder_id;
+    ELSE
+        v_boarder_id := NEW.boarder_id;
+    END IF;
+
+    SELECT manual_debt INTO v_manual_debt FROM profiles WHERE id = v_boarder_id;
+    
+    SELECT COALESCE(SUM(amount), 0) INTO v_total_expenses 
+    FROM expenses 
+    WHERE boarder_id = v_boarder_id AND status != 'Paid';
+
+    SELECT COALESCE(SUM(amount), 0) INTO v_total_payments 
+    FROM payments 
+    WHERE boarder_id = v_boarder_id AND expense_id IS NULL;
+
+    UPDATE profiles 
+    SET balance = GREATEST(0, v_manual_debt + v_total_expenses - v_total_payments)
+    WHERE id = v_boarder_id;
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- TRIGGERS FOR EXPENSES AND PAYMENTS
+CREATE TRIGGER trg_update_balance_expense
+AFTER INSERT OR UPDATE OR DELETE ON expenses
+FOR EACH ROW EXECUTE FUNCTION update_boarder_balance();
+
+CREATE TRIGGER trg_update_balance_payment
+AFTER INSERT OR UPDATE OR DELETE ON payments
+FOR EACH ROW EXECUTE FUNCTION update_boarder_balance();
+
+-- Function to update balance when manual_debt changes
+CREATE OR REPLACE FUNCTION update_profile_balance_on_manual_debt() RETURNS TRIGGER AS $$
+DECLARE
+    v_total_expenses NUMERIC;
+    v_total_payments NUMERIC;
+BEGIN
+    IF (OLD.manual_debt IS DISTINCT FROM NEW.manual_debt) THEN
+        SELECT COALESCE(SUM(amount), 0) INTO v_total_expenses 
+        FROM expenses 
+        WHERE boarder_id = NEW.id AND status != 'Paid';
+
+        SELECT COALESCE(SUM(amount), 0) INTO v_total_payments 
+        FROM payments 
+        WHERE boarder_id = NEW.id AND expense_id IS NULL;
+
+        NEW.balance := GREATEST(0, NEW.manual_debt + v_total_expenses - v_total_payments);
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_profile_balance
+BEFORE UPDATE ON profiles
+FOR EACH ROW EXECUTE FUNCTION update_profile_balance_on_manual_debt();
+
+-- 6. ATOMIC PAYMENT FUNCTION
+CREATE OR REPLACE FUNCTION record_payment_v3(
   p_boarder_id UUID,
   p_amount NUMERIC,
   p_method TEXT,
@@ -52,12 +119,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- 6. RLS POLICIES
+-- 7. RLS POLICIES
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow individual read" ON profiles FOR SELECT USING (auth.uid() = id OR (SELECT role FROM profiles WHERE id = auth.uid()) IN ('Admin', 'TopMan'));
+-- Allow all authenticated users to see profiles (so boarders can see their rank)
+CREATE POLICY "Profiles are viewable by authenticated users" ON profiles FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Admin full access profiles" ON profiles FOR ALL USING ((SELECT role FROM profiles WHERE id = auth.uid()) IN ('Admin', 'TopMan'));
 
 CREATE POLICY "Users see own expenses" ON expenses FOR SELECT USING (boarder_id = auth.uid() OR (SELECT role FROM profiles WHERE id = auth.uid()) IN ('Admin', 'TopMan'));

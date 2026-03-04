@@ -5,7 +5,7 @@ import { useNotify } from '../../context/NotificationContext';
 import { formatCurrency, formatShortDate } from '../../utils/formatters';
 import { 
   Users as UsersIcon, AlertCircle, CreditCard, PlusCircle, 
-  UserPlus, Edit, Trash2, RefreshCw, List, ReceiptText, Shield, Zap, TrendingUp, Search, History, RotateCcw
+  UserPlus, Edit, Trash2, RefreshCw, List, ReceiptText, Shield, Zap, TrendingUp, Search, History, RotateCcw, Crown
 } from 'lucide-react';
 import { StatCard, DashboardHeader, Section } from '../../components/common/DashboardUI';
 import { CardSkeleton, TableSkeleton } from '../../components/common/Skeleton';
@@ -14,6 +14,20 @@ import UserModal from '../../components/modals/UserModal';
 import PaymentModal from '../../components/modals/PaymentModal';
 import HistoryModal from '../../components/modals/HistoryModal';
 import ConfirmationModal from '../../components/modals/ConfirmationModal';
+
+const CategoryBadge = ({ category, type }) => {
+  if (type === 'PAYMENT') return <span className="badge badge-success">Payment</span>;
+  
+  const catLower = (category || '').toLowerCase();
+  let className = 'badge';
+  if (catLower.includes('rent')) className += ' badge-rent';
+  else if (catLower.includes('electricity')) className += ' badge-electricity';
+  else if (catLower.includes('water')) className += ' badge-water';
+  else if (catLower.includes('gas')) className += ' badge-gas';
+  else if (catLower.includes('food') || catLower.includes('meal')) className += ' badge-food';
+  
+  return <span className={className}>{category}</span>;
+};
 
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -57,10 +71,7 @@ const AdminDashboard = () => {
   useEffect(() => { fetchAdminData(); }, [fetchAdminData]);
 
   const getResidentDebt = (resident) => {
-    const manualDebt = parseFloat(resident.manual_debt || 0);
-    const calculatedExpenses = expenses.filter(e => e.boarder_id === resident.id && e.status !== 'Paid').reduce((sum, e) => sum + parseFloat(e.amount), 0);
-    const calculatedPayments = payments.filter(p => p.boarder_id === resident.id && !p.expense_id).reduce((sum, p) => sum + parseFloat(p.amount), 0);
-    return Math.max(0, manualDebt + calculatedExpenses - calculatedPayments);
+    return parseFloat(resident.balance || 0);
   };
 
   const totalUnpaid = boarders.reduce((sum, b) => sum + getResidentDebt(b), 0);
@@ -265,14 +276,25 @@ const AdminDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {boarders.filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase())).map(b => {
-                  const debt = getResidentDebt(b);
-                  return (
-                    <tr key={b.id} style={{ borderTop: '1px solid var(--border)' }}>
-                      <td style={{ padding: '16px 24px' }}>
-                        <button onClick={() => { setSelectedResident(b); setIsHistoryModalOpen(true); }} style={{ color: 'white', fontWeight: '700', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', fontSize: '15px' }}>{b.name}</button>
-                        <div style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '2px' }}>@{b.username}</div>
-                      </td>
+                {boarders
+                  .filter(b => b.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .sort((a, b) => getResidentDebt(b) - getResidentDebt(a))
+                  .map((b, index) => {
+                    const debt = getResidentDebt(b);
+                    const isTop1 = index === 0 && debt > 0;
+                    const isTop2 = index === 1 && debt > 0;
+                    const isTop3 = index === 2 && debt > 0;
+                    const crownColor = isTop1 ? '#FFD700' : isTop2 ? '#C0C0C0' : isTop3 ? '#CD7F32' : null;
+
+                    return (
+                      <tr key={b.id} style={{ borderTop: '1px solid var(--border)', background: crownColor ? `linear-gradient(90deg, ${crownColor}10 0%, transparent 100%)` : 'transparent' }}>
+                        <td style={{ padding: '16px 24px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {crownColor && <Crown size={16} color={crownColor} fill={crownColor} style={{ filter: 'drop-shadow(0 0 4px ' + crownColor + '40)' }} />}
+                            <button onClick={() => { setSelectedResident(b); setIsHistoryModalOpen(true); }} style={{ color: 'white', fontWeight: '700', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', fontSize: '15px' }}>{b.name}</button>
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '2px', paddingLeft: crownColor ? '24px' : '0' }}>@{b.username}</div>
+                        </td>
                       <td style={{ padding: '16px 24px' }}>
                         <div style={{ fontWeight: '800', color: debt > 0 ? 'var(--danger)' : 'var(--success)', fontSize: '15px' }}>{debt > 0 ? formatCurrency(debt) : 'CLEAR'}</div>
                       </td>
@@ -307,7 +329,10 @@ const AdminDashboard = () => {
                     <div key={exp.id} style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div style={{ fontWeight: '700', fontSize: '14px' }}>{exp.profiles?.name}</div>
-                        <div style={{ fontSize: '11px', opacity: 0.5 }}>{exp.category} • {formatShortDate(exp.due_date)}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                          <CategoryBadge category={exp.category} type="DEBT" />
+                          <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatShortDate(exp.due_date)}</span>
+                        </div>
                       </div>
                       <div style={{ fontWeight: '800', color: 'white' }}>{formatCurrency(exp.amount)}</div>
                     </div>
@@ -333,7 +358,10 @@ const AdminDashboard = () => {
                         </div>
                         <div>
                           <div style={{ fontSize: '13px', fontWeight: '700' }}>{item.profiles?.name}</div>
-                          <div style={{ fontSize: '10px', opacity: 0.5 }}>{item.type === 'DEBT' ? item.category : 'Payment'} • {formatShortDate(item.created_at || item.date)}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                            <CategoryBadge category={item.type === 'PAYMENT' ? 'Payment' : item.category} type={item.type} />
+                            <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatShortDate(item.created_at || item.date)}</span>
+                          </div>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '12px' }}>

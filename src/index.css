@@ -175,6 +175,13 @@ input:focus { border-color: var(--accent); background: rgba(0, 0, 0, 0.4); box-s
 .badge-success { color: var(--success); background: rgba(16, 185, 129, 0.1); }
 .badge-warn { color: var(--warn); background: rgba(245, 158, 11, 0.1); }
 
+/* Category Badges */
+.badge-rent { color: #6366f1; background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.2); }
+.badge-electricity { color: #f59e0b; background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); }
+.badge-water { color: #06b6d4; background: rgba(6, 182, 212, 0.1); border-color: rgba(6, 182, 212, 0.2); }
+.badge-gas { color: #f43f5e; background: rgba(244, 63, 94, 0.1); border-color: rgba(244, 63, 94, 0.2); }
+.badge-food { color: #10b981; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.2); }
+
 .chip {
   display: inline-flex;
   align-items: center;

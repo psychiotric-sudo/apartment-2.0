@@ -10,7 +10,7 @@ const CATEGORIES = ['Meals/Food', 'Rent', 'Electricity', 'Water', 'Gas'];
 const ExpenseModal = ({ isOpen, onClose, boarders, onSave, editingExpense = null }) => {
   const { showToast } = useNotify();
   const [formData, setFormData] = useState({
-    category: 'Meals/Food', amount: '', description: '',
+    category: 'Rent', amount: '1500', description: '',
     due_date: new Date().toISOString().split('T')[0],
     participants: [], rounding: ROUNDING_MODES.UP_1
   });
@@ -25,7 +25,7 @@ const ExpenseModal = ({ isOpen, onClose, boarders, onSave, editingExpense = null
       });
     } else {
       setFormData({
-        category: 'Meals/Food', amount: '', description: '',
+        category: 'Rent', amount: '1500', description: '',
         due_date: new Date().toISOString().split('T')[0],
         participants: boarders.map(b => b.id), rounding: ROUNDING_MODES.UP_1
       });
@@ -64,6 +64,16 @@ const ExpenseModal = ({ isOpen, onClose, boarders, onSave, editingExpense = null
     } catch (err) { showToast(err.message, "error"); onSave(); }
   };
 
+  const getCategoryClass = (cat) => {
+    const catLower = cat.toLowerCase();
+    if (catLower.includes('rent')) return 'badge-rent';
+    if (catLower.includes('electricity')) return 'badge-electricity';
+    if (catLower.includes('water')) return 'badge-water';
+    if (catLower.includes('gas')) return 'badge-gas';
+    if (catLower.includes('food') || catLower.includes('meal')) return 'badge-food';
+    return '';
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -78,7 +88,13 @@ const ExpenseModal = ({ isOpen, onClose, boarders, onSave, editingExpense = null
             <label style={{ fontSize: '12px', marginBottom: '6px' }}>Category</label>
             <div className="chip-group">
               {CATEGORIES.map(cat => (
-                <button key={cat} type="button" className={`chip ${formData.category === cat ? 'selected' : ''}`} onClick={() => setFormData({...formData, category: cat})}>{cat}</button>
+                <button 
+                  key={cat} type="button" 
+                  className={`chip ${formData.category === cat ? 'selected ' + getCategoryClass(cat) : ''}`} 
+                  onClick={() => setFormData({...formData, category: cat})}
+                >
+                  {cat}
+                </button>
               ))}
             </div>
           </div>

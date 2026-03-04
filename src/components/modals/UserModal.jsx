@@ -10,7 +10,7 @@ const UserModal = ({ isOpen, onClose, boarders, onSave, editingUser = null }) =>
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (editingUser) setFormData({ name: editingUser.name || '', role: editingUser.role || 'Boarder', username: editingUser.username || '', manual_debt: '' });
+    if (editingUser) setFormData({ name: editingUser.name || '', role: editingUser.role || 'Boarder', username: editingUser.username || '', manual_debt: editingUser.manual_debt || '' });
     else setFormData({ name: '', role: 'Boarder', username: '', manual_debt: '' });
   }, [editingUser, isOpen]);
 
@@ -20,11 +20,12 @@ const UserModal = ({ isOpen, onClose, boarders, onSave, editingUser = null }) =>
     onSave();
     try {
       if (editingUser) {
-        await supabase.from('profiles').update({ name: formData.name, role: formData.role }).eq('id', editingUser.id);
-        const debtVal = parseFloat(formData.manual_debt);
-        if (!isNaN(debtVal) && debtVal !== 0) {
-          await supabase.from('expenses').insert([{ boarder_id: editingUser.id, category: 'Rent', amount: Math.abs(debtVal), description: 'Initial starting balance', due_date: new Date().toISOString().split('T')[0] }]);
-        }
+        const debtVal = parseFloat(formData.manual_debt) || 0;
+        await supabase.from('profiles').update({ 
+          name: formData.name, 
+          role: formData.role,
+          manual_debt: debtVal
+        }).eq('id', editingUser.id);
         showToast(`Profile for ${formData.name} updated`, "success");
       }
     } catch (err) { showToast(err.message, "error"); onSave(); }

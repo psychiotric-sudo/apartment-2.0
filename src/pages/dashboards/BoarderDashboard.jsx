@@ -3,8 +3,22 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotify } from '../../context/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import { formatCurrency, getMonthName, getDayNumber, getShortMonth } from '../../utils/formatters';
-import { CheckCircle, Bell, Clock, Receipt, Wallet, ArrowUpRight, TrendingDown, ChevronDown, ChevronRight } from 'lucide-react';
+import { CheckCircle, Bell, Clock, Receipt, Wallet, ArrowUpRight, TrendingDown, ChevronDown, ChevronRight, Crown } from 'lucide-react';
 import { Section } from '../../components/common/DashboardUI';
+
+const CategoryBadge = ({ category, type }) => {
+  if (type === 'PAYMENT') return <span className="badge badge-success">Payment</span>;
+  
+  const catLower = category.toLowerCase();
+  let className = 'badge';
+  if (catLower.includes('rent')) className += ' badge-rent';
+  else if (catLower.includes('electricity')) className += ' badge-electricity';
+  else if (catLower.includes('water')) className += ' badge-water';
+  else if (catLower.includes('gas')) className += ' badge-gas';
+  else if (catLower.includes('food') || catLower.includes('meal')) className += ' badge-food';
+  
+  return <span className={className}>{category}</span>;
+};
 
 const BoarderDashboard = () => {
   const { user } = useAuth();
@@ -12,13 +26,25 @@ const BoarderDashboard = () => {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedMonths, setExpandedMonths] = useState({});
+  const [totalUnpaid, setTotalUnpaid] = useState(0);
+  const [rankInfo, setRankInfo] = useState({ rank: 0, color: null });
 
   useEffect(() => {
     fetchData();
-    const channel = supabase.channel('my-records').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'expenses', filter: `boarder_id=eq.${user.id}` }, () => {
-      fetchData();
-      showToast("Data updated", "info");
-    }).subscribe();
+    const channel = supabase.channel('my-records')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `boarder_id=eq.${user.id}` }, () => {
+        fetchData();
+        showToast("Records updated", "info");
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments', filter: `boarder_id=eq.${user.id}` }, () => {
+        fetchData();
+        showToast("Payment synced", "info");
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, () => {
+        fetchData();
+        showToast("Profile updated", "info");
+      })
+      .subscribe();
     return () => supabase.removeChannel(channel);
   }, [user]);
 
@@ -28,12 +54,31 @@ const BoarderDashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [eRes, pRes] = await Promise.all([
+      const [eRes, pRes, profileRes, allProfilesRes] = await Promise.all([
         supabase.from('expenses').select('*').eq('boarder_id', user.id).order('due_date', { ascending: false }),
-        supabase.from('payments').select('*').eq('boarder_id', user.id).order('date', { ascending: false })
+        supabase.from('payments').select('*').eq('boarder_id', user.id).order('date', { ascending: false }),
+        supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+        supabase.from('profiles').select('id, balance').eq('role', 'Boarder')
       ]);
       
-      const manualDebt = parseFloat(user.manual_debt || 0);
+      const latestProfile = profileRes.data || user;
+      setTotalUnpaid(parseFloat(latestProfile.balance || 0));
+
+      if (allProfilesRes.data) {
+        const sorted = [...allProfilesRes.data].sort((a, b) => (parseFloat(b.balance) || 0) - (parseFloat(a.balance) || 0));
+        const myIndex = sorted.findIndex(p => p.id === user.id);
+        const myRank = myIndex + 1;
+        const myBalance = parseFloat(latestProfile.balance || 0);
+
+        if (myRank <= 3 && myBalance > 0) {
+          const color = myRank === 1 ? '#FFD700' : myRank === 2 ? '#C0C0C0' : '#CD7F32';
+          setRankInfo({ rank: myRank, color });
+        } else {
+          setRankInfo({ rank: 0, color: null });
+        }
+      }
+
+      const manualDebt = parseFloat(latestProfile.manual_debt || 0);
       const combined = [
         ...eRes.data.map(e => ({ ...e, type: 'DEBT', sortDate: e.due_date || e.created_at })),
         ...pRes.data.map(p => ({ ...p, type: 'PAYMENT', sortDate: p.date || p.created_at }))
@@ -42,7 +87,7 @@ const BoarderDashboard = () => {
       if (manualDebt > 0) {
         combined.push({
           id: 'manual-debt', category: 'Expense (Initial)', amount: manualDebt,
-          type: 'DEBT', status: 'Unpaid', sortDate: user.manual_debt_date || user.created_at || new Date().toISOString()
+          type: 'DEBT', status: 'Unpaid', sortDate: latestProfile.manual_debt_date || latestProfile.created_at || new Date().toISOString()
         });
       }
 
@@ -57,10 +102,6 @@ const BoarderDashboard = () => {
       setLoading(false);
     }
   };
-
-  const totalUnpaid = history
-    .filter(item => item.type === 'DEBT' && item.status !== 'Paid')
-    .reduce((sum, e) => sum + parseFloat(e.amount), 0);
 
   const groupedHistory = history.reduce((acc, item) => {
     const month = getMonthName(item.sortDate);
@@ -87,7 +128,21 @@ const BoarderDashboard = () => {
         </button>
       </div>
 
-      <div className="balance-card-premium" style={{ marginBottom: '40px' }}>
+      <div className="balance-card-premium" style={{ marginBottom: '40px', position: 'relative', overflow: 'hidden' }}>
+        {rankInfo.rank > 0 && (
+          <div style={{ 
+            position: 'absolute', top: '0', right: '0', 
+            padding: '12px 20px', background: `${rankInfo.color}15`, 
+            borderBottomLeftRadius: '24px', display: 'flex', alignItems: 'center', gap: '8px',
+            border: `1px solid ${rankInfo.color}30`, borderTop: 'none', borderRight: 'none',
+            backdropFilter: 'blur(4px)'
+          }}>
+            <Crown size={16} color={rankInfo.color} fill={rankInfo.color} style={{ filter: `drop-shadow(0 0 5px ${rankInfo.color}60)` }} />
+            <span style={{ color: rankInfo.color, fontWeight: '900', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Rank #{rankInfo.rank} Highest Debt
+            </span>
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <span style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1.5px', opacity: 0.7 }}>Current Balance Due</span>
@@ -135,11 +190,14 @@ const BoarderDashboard = () => {
                         </div>
                         <div className="glass-card" style={{ flex: 1, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isPayment ? 'rgba(34, 197, 94, 0.03)' : 'rgba(255,255,255,0.01)', border: isSettled ? '1px solid rgba(255,255,255,0.05)' : '1px solid var(--border)', borderRadius: '14px' }}>
                           <div>
-                            <div style={{ fontSize: '14px', fontWeight: '700', color: isSettled ? 'var(--text2)' : 'white' }}>{isPayment ? `Payment via ${item.method}` : item.category}</div>
-                            <div style={{ fontSize: '11px', opacity: 0.5, marginTop: '2px' }}>{isPayment ? 'Successfully Received' : item.description || 'Service Debt'}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                              <CategoryBadge category={item.category || 'Payment'} type={item.type} />
+                              {isSettled && <span className="badge badge-success">Settled</span>}
+                            </div>
+                            <div style={{ fontSize: '11px', opacity: 0.5 }}>{isPayment ? `Received via ${item.method}` : item.description || 'Service Debt'}</div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '16px', fontWeight: '900', color: isPayment ? 'var(--success)' : isSettled ? 'var(--text2)' : 'white' }}>{isPayment ? '+' : '-'} ₱{Math.abs(parseFloat(item.amount)).toLocaleString()}</div>
+                            <div style={{ fontSize: '16px', fontWeight: '900', color: isPayment ? 'var(--success)' : isSettled ? 'var(--text2)' : 'white' }}>{isPayment ? '-' : '+'} ₱{Math.abs(parseFloat(item.amount)).toLocaleString()}</div>
                           </div>
                         </div>
                       </div>
