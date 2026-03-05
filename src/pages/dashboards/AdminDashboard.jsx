@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { useNotify } from '../../context/NotificationContext';
-import { formatCurrency, formatShortDate } from '../../utils/formatters';
+import { formatCurrency, formatShortDate, formatDateTimeWithPHT } from '../../utils/formatters';
 import { 
   Users as UsersIcon, AlertCircle, CreditCard, PlusCircle, 
   UserPlus, Edit, Trash2, RefreshCw, List, ReceiptText, Shield, Zap, TrendingUp, Search, History, RotateCcw, Crown
@@ -375,7 +375,7 @@ const AdminDashboard = () => {
             <div className="glass-card" style={{ padding: '0', overflow: 'hidden', borderRadius: '16px' }}>
               <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                 {[
-                  ...expenses.map(e => ({...e, type: 'DEBT', timestamp: e.created_at})), 
+                  ...expenses.map(e => ({...e, type: 'DEBT', timestamp: e.created_at || e.due_date})), 
                   ...payments.map(p => ({...p, type: 'PAYMENT', timestamp: p.date || p.created_at})),
                   ...boarders
                     .filter(b => parseFloat(b.manual_debt || 0) > 0)
@@ -389,7 +389,7 @@ const AdminDashboard = () => {
                       name: b.name
                     }))
                 ]
-                  .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                   .slice(0, 30)
                   .map((item, idx) => (
                     <div key={idx} style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
@@ -401,7 +401,7 @@ const AdminDashboard = () => {
                           <div style={{ fontSize: '13px', fontWeight: '700' }}>{item.profiles?.name || item.name}</div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                             <CategoryBadge category={item.type === 'PAYMENT' ? 'Payment' : item.category} type={item.type} />
-                            <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatShortDate(item.timestamp)}</span>
+                            <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatDateTimeWithPHT(item.timestamp)}</span>
                           </div>
                         </div>
                       </div>

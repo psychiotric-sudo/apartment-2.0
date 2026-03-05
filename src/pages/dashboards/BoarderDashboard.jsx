@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotify } from '../../context/NotificationContext';
 import { supabase } from '../../lib/supabase';
-import { formatCurrency, getMonthName, getDayNumber, getShortMonth, formatDate } from '../../utils/formatters';
-import { CheckCircle, Bell, Clock, Receipt, Wallet, ArrowUpRight, TrendingDown, ChevronDown, ChevronRight, Crown } from 'lucide-react';
+import { formatCurrency, getMonthName, getDayNumber, getShortMonth, formatDate, formatDateTimeWithPHT } from '../../utils/formatters';
+import { CheckCircle, Bell, Clock, Receipt, Wallet, ArrowUpRight, TrendingDown, ChevronDown, ChevronRight, Crown, Smartphone } from 'lucide-react';
 import { Section } from '../../components/common/DashboardUI';
+import GCashPaymentModal from '../../components/modals/GCashPaymentModal';
 
 const CategoryBadge = ({ category, type }) => {
   if (type === 'PAYMENT') return <span className="badge badge-success">Payment</span>;
@@ -29,6 +30,7 @@ const BoarderDashboard = () => {
   const [expandedMonths, setExpandedMonths] = useState({});
   const [totalUnpaid, setTotalUnpaid] = useState(0);
   const [rankInfo, setRankInfo] = useState({ rank: 0, color: null });
+  const [isGCashModalOpen, setIsGCashModalOpen] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -152,13 +154,37 @@ const BoarderDashboard = () => {
           <div>
             <span style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1.5px', opacity: 0.7 }}>Current Balance Due</span>
             <h1 style={{ fontSize: '48px', fontWeight: '900', margin: '8px 0', color: 'white' }}>{formatCurrency(totalUnpaid)}</h1>
-            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '16px' }}>
               <div style={{ background: 'rgba(255,255,255,0.1)', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Clock size={14} /> Outstanding Records
               </div>
-              <div style={{ background: 'rgba(34, 197, 94, 0.2)', color: '#4ade80', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <CheckCircle size={14} /> Verified Sync
-              </div>
+              <button 
+                onClick={() => setIsGCashModalOpen(true)}
+                style={{ 
+                  padding: '6px 14px', 
+                  borderRadius: '10px', 
+                  fontSize: '12px', 
+                  fontWeight: '700',
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '8px',
+                  background: 'transparent',
+                  border: '1px solid #007dfe',
+                  color: '#007dfe',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'rgba(0, 125, 254, 0.1)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                <Smartphone size={14} /> GCash Pay
+              </button>
             </div>
           </div>
           <div style={{ background: 'var(--accent)', width: '56px', height: '56px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -199,7 +225,10 @@ const BoarderDashboard = () => {
                               <CategoryBadge category={item.category || 'Payment'} type={item.type} />
                               {isSettled && <span className="badge badge-success">Settled</span>}
                             </div>
-                            <div style={{ fontSize: '11px', opacity: 0.5 }}>{isPayment ? `Received via ${item.method}` : item.description || 'Service Debt'}</div>
+                            <div style={{ fontSize: '11px', opacity: 0.5, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <span>{isPayment ? `Received via ${item.method}` : item.description || 'Service Debt'}</span>
+                              <span style={{ fontSize: '9px', fontWeight: '700', color: 'var(--accent)' }}>{formatDateTimeWithPHT(item.sortDate)}</span>
+                            </div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <div style={{ fontSize: '16px', fontWeight: '900', color: isPayment ? 'var(--success)' : isSettled ? 'var(--text2)' : 'white' }}>{isPayment ? '-' : '+'} ₱{Math.abs(parseFloat(item.amount)).toLocaleString()}</div>
@@ -214,6 +243,11 @@ const BoarderDashboard = () => {
           );
         })}
       </Section>
+
+      <GCashPaymentModal 
+        isOpen={isGCashModalOpen} 
+        onClose={() => setIsGCashModalOpen(false)} 
+      />
     </div>
   );
 };

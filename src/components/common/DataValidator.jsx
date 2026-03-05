@@ -14,13 +14,19 @@ const DataValidator = () => {
   }, [user]);
 
   const runAudit = async () => {
-    const issues = [];
-    const { data: expenses } = await supabase.from('expenses').select('id, boarder_id, profiles(id)');
-    const orphans = expenses?.filter(e => !e.profiles) || [];
-    if (orphans.length > 0) issues.push(`${orphans.length} expenses have deleted owners.`);
+    try {
+      const issues = [];
+      const { data: expenses, error } = await supabase.from('expenses').select('id, boarder_id, profiles(id)');
+      if (error) throw error;
+      
+      const orphans = expenses?.filter(e => !e.profiles) || [];
+      if (orphans.length > 0) issues.push(`${orphans.length} expenses have deleted owners.`);
 
-    if (issues.length > 0) {
-      showToast(`Audit Warning: ${issues[0]}`, 'error');
+      if (issues.length > 0) {
+        showToast(`Audit Warning: ${issues[0]}`, 'error');
+      }
+    } catch (err) {
+      console.error("Audit failed:", err);
     }
   };
 

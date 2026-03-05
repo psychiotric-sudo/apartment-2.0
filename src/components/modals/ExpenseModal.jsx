@@ -51,17 +51,40 @@ const ExpenseModal = ({ isOpen, onClose, boarders, onSave, editingExpense = null
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (formData.participants.length === 0) { showToast("Select participants", "error"); return; }
-    onClose();
-    onSave(); 
+    
+    setLoading(true);
     try {
       if (editingExpense) {
-        await supabase.from('expenses').update({ category: formData.category, amount: parseFloat(formData.amount), description: formData.description, due_date: formData.due_date }).eq('id', editingExpense.id);
+        const { error } = await supabase.from('expenses')
+          .update({ 
+            category: formData.category, 
+            amount: parseFloat(formData.amount), 
+            description: formData.description, 
+            due_date: formData.due_date 
+          })
+          .eq('id', editingExpense.id);
+        if (error) throw error;
       } else {
-        const records = formData.participants.map(pid => ({ boarder_id: pid, category: formData.category, amount: perPerson, description: formData.description || `Split ${formData.category}`, due_date: formData.due_date, status: 'Pending' }));
-        await supabase.from('expenses').insert(records);
+        const records = formData.participants.map(pid => ({ 
+          boarder_id: pid, 
+          category: formData.category, 
+          amount: perPerson, 
+          description: formData.description || `Split ${formData.category}`, 
+          due_date: formData.due_date, 
+          status: 'Pending' 
+        }));
+        const { error } = await supabase.from('expenses').insert(records);
+        if (error) throw error;
       }
+      
       showToast(`${formData.category} recorded`, "success");
-    } catch (err) { showToast(err.message, "error"); onSave(); }
+      onSave(); // Refresh data
+      onClose(); // Close modal after success
+    } catch (err) { 
+      showToast(err.message, "error"); 
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getCategoryClass = (cat) => {

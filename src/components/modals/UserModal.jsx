@@ -16,19 +16,27 @@ const UserModal = ({ isOpen, onClose, boarders, onSave, editingUser = null }) =>
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    onClose();
-    onSave();
+    setLoading(true);
     try {
       if (editingUser) {
         const debtVal = parseFloat(formData.manual_debt) || 0;
-        await supabase.from('profiles').update({ 
+        const { error } = await supabase.from('profiles').update({ 
           name: formData.name, 
           role: formData.role,
           manual_debt: debtVal
         }).eq('id', editingUser.id);
+        
+        if (error) throw error;
+        
         showToast(`Profile for ${formData.name} updated`, "success");
+        onSave(); // Refresh data
+        onClose(); // Close modal after success
       }
-    } catch (err) { showToast(err.message, "error"); onSave(); }
+    } catch (err) { 
+      showToast(err.message, "error"); 
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!isOpen) return null;

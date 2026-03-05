@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { X, Calendar, ArrowUpCircle, ArrowDownCircle, RefreshCw, Clock, CheckCircle2, ChevronDown, ChevronRight, Info } from 'lucide-react';
-import { formatCurrency, formatDate, getMonthName } from '../../utils/formatters';
+import { formatCurrency, formatDate, getMonthName, formatDateTimeWithPHT } from '../../utils/formatters';
 
 const HistoryModal = ({ isOpen, onClose, user }) => {
   const [history, setHistory] = useState({});
@@ -164,8 +164,8 @@ const HistoryModal = ({ isOpen, onClose, user }) => {
                                 const isDebt = item.type === "DEBT";
                                 return (
                                   <tr key={item.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                    <td style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '700', color: 'white', whiteSpace: 'nowrap' }}>
-                                      {new Date(item.date).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}
+                                    <td style={{ padding: '12px 16px', fontSize: '11px', fontWeight: '700', color: 'white', whiteSpace: 'nowrap' }}>
+                                      {formatDateTimeWithPHT(item.date)}
                                     </td>
                                     <td style={{ padding: '12px 16px' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

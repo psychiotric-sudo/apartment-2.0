@@ -15,14 +15,25 @@ const PaymentModal = ({ isOpen, onClose, boarders, expenses, onSave }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.boarder_id || !formData.amount) { showToast("Missing fields", "error"); return; }
+    
     const resident = boarders.find(b => b.id === formData.boarder_id);
-    onClose();
-    onSave(); 
+    
     try {
-      const { error } = await supabase.rpc('record_payment_v3', { p_boarder_id: formData.boarder_id, p_amount: parseFloat(formData.amount), p_method: formData.method, p_expense_id: formData.expense_id || null });
+      const { error } = await supabase.rpc('record_payment_v3', { 
+        p_boarder_id: formData.boarder_id, 
+        p_amount: parseFloat(formData.amount), 
+        p_method: formData.method, 
+        p_expense_id: formData.expense_id || null 
+      });
+      
       if (error) throw error;
+      
       showToast(`Payment for ${resident?.name} synced`, "success");
-    } catch (err) { showToast(err.message, "error"); onSave(); }
+      onSave(); // Refresh data
+      onClose(); // Close modal after success
+    } catch (err) { 
+      showToast(err.message, "error"); 
+    }
   };
 
   const filteredExpenses = expenses.filter(e => e.boarder_id === formData.boarder_id && e.status !== 'Paid');

@@ -48,39 +48,43 @@ export const NotificationProvider = ({ children }) => {
 
   useEffect(() => {
     const setupRealtime = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) return;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) return;
 
-      const channel = supabase.channel('push-notifications')
-        .on('postgres_changes', { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'expenses',
-          filter: `boarder_id=eq.${session.user.id}` 
-        }, (payload) => {
-          sendBrowserNotification('New Debt Recorded', `You have a new expense: ${payload.new.category} for ₱${payload.new.amount}`);
-        })
-        .on('postgres_changes', { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'expenses',
-          filter: `boarder_id=eq.${session.user.id}` 
-        }, (payload) => {
-          if (payload.new.status === 'Paid') {
-            sendBrowserNotification('Debt Cleared', `Your ${payload.new.category} expense has been marked as Paid.`);
-          }
-        })
-        .on('postgres_changes', { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'payments',
-          filter: `boarder_id=eq.${session.user.id}` 
-        }, (payload) => {
-          sendBrowserNotification('Payment Received', `A payment of ₱${payload.new.amount} has been recorded.`);
-        })
-        .subscribe();
+        const channel = supabase.channel('push-notifications')
+          .on('postgres_changes', { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'expenses',
+            filter: `boarder_id=eq.${session.user.id}` 
+          }, (payload) => {
+            sendBrowserNotification('New Debt Recorded', `You have a new expense: ${payload.new.category} for ₱${payload.new.amount}`);
+          })
+          .on('postgres_changes', { 
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'expenses',
+            filter: `boarder_id=eq.${session.user.id}` 
+          }, (payload) => {
+            if (payload.new.status === 'Paid') {
+              sendBrowserNotification('Debt Cleared', `Your ${payload.new.category} expense has been marked as Paid.`);
+            }
+          })
+          .on('postgres_changes', { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'payments',
+            filter: `boarder_id=eq.${session.user.id}` 
+          }, (payload) => {
+            sendBrowserNotification('Payment Received', `A payment of ₱${payload.new.amount} has been recorded.`);
+          })
+          .subscribe();
 
-      return () => supabase.removeChannel(channel);
+        return () => supabase.removeChannel(channel);
+      } catch (err) {
+        console.error("Supabase Realtime setup failed:", err);
+      }
     };
 
     setupRealtime();
