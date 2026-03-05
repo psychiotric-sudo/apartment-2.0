@@ -2,16 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotify } from '../../context/NotificationContext';
 import { supabase } from '../../lib/supabase';
-import { formatCurrency, getMonthName, getDayNumber, getShortMonth } from '../../utils/formatters';
+import { formatCurrency, getMonthName, getDayNumber, getShortMonth, formatDate } from '../../utils/formatters';
 import { CheckCircle, Bell, Clock, Receipt, Wallet, ArrowUpRight, TrendingDown, ChevronDown, ChevronRight, Crown } from 'lucide-react';
 import { Section } from '../../components/common/DashboardUI';
 
 const CategoryBadge = ({ category, type }) => {
   if (type === 'PAYMENT') return <span className="badge badge-success">Payment</span>;
   
-  const catLower = category.toLowerCase();
+  const catLower = (category || '').toLowerCase();
   let className = 'badge';
-  if (catLower.includes('rent')) className += ' badge-rent';
+  if (catLower.includes('initial')) className += ' badge-initial';
+  else if (catLower.includes('rent')) className += ' badge-rent';
   else if (catLower.includes('electricity')) className += ' badge-electricity';
   else if (catLower.includes('water')) className += ' badge-water';
   else if (catLower.includes('gas')) className += ' badge-gas';
@@ -85,9 +86,13 @@ const BoarderDashboard = () => {
       ];
 
       if (manualDebt > 0) {
+        const initialDate = latestProfile.manual_debt_date || latestProfile.created_at || new Date().toISOString();
         combined.push({
-          id: 'manual-debt', category: 'Expense (Initial)', amount: manualDebt,
-          type: 'DEBT', status: 'Unpaid', sortDate: latestProfile.manual_debt_date || latestProfile.created_at || new Date().toISOString()
+          id: 'manual-debt', 
+          category: 'Initial Balance', 
+          amount: manualDebt,
+          description: `Initial Balance as of ${formatDate(initialDate)}`,
+          type: 'DEBT', status: 'Unpaid', sortDate: initialDate
         });
       }
 

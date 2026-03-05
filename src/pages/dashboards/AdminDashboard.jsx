@@ -20,7 +20,8 @@ const CategoryBadge = ({ category, type }) => {
   
   const catLower = (category || '').toLowerCase();
   let className = 'badge';
-  if (catLower.includes('rent')) className += ' badge-rent';
+  if (catLower.includes('initial')) className += ' badge-initial';
+  else if (catLower.includes('rent')) className += ' badge-rent';
   else if (catLower.includes('electricity')) className += ' badge-electricity';
   else if (catLower.includes('water')) className += ' badge-water';
   else if (catLower.includes('gas')) className += ' badge-gas';
@@ -50,11 +51,13 @@ const AdminDashboard = () => {
   const closeConfirm = () => setConfirmConfig(prev => ({ ...prev, isOpen: false }));
   const triggerConfirm = (config) => setConfirmConfig({ ...config, isOpen: true });
 
+  const handleRefresh = () => window.location.reload();
+
   const fetchAdminData = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true);
       const [profilesRes, expensesRes, paymentsRes] = await Promise.all([
-        supabase.from('profiles').select('*').in('role', ['Boarder', 'Admin']).order('name'),
+        supabase.from('profiles').select('*').in('role', ['Boarder', 'Admin', 'TopMan']).order('name'),
         supabase.from('expenses').select('*, profiles(name)').order('due_date', { ascending: false }),
         supabase.from('payments').select('*, profiles(name)').order('date', { ascending: false })
       ]);
@@ -91,7 +94,7 @@ const AdminDashboard = () => {
         if (orphanExpenseIds.length > 0) await supabase.from('expenses').delete().in('id', orphanExpenseIds);
         if (orphanPaymentIds.length > 0) await supabase.from('payments').delete().in('id', orphanPaymentIds);
         showToast(`Repair complete.`, "success");
-        fetchAdminData(true);
+        setTimeout(handleRefresh, 1000);
       } else {
         showToast("Database is healthy.", "info");
       }
@@ -120,7 +123,7 @@ const AdminDashboard = () => {
         supabase.from('profiles').update({ manual_debt: 0 }).neq('role', 'SuperAdmin')
       ]);
       showToast("System reset complete.", "success");
-      fetchAdminData();
+      setTimeout(handleRefresh, 1000);
     } catch (err) {
       showToast("Reset failed", "error");
       setLoading(false);
@@ -146,7 +149,7 @@ const AdminDashboard = () => {
         supabase.from('profiles').update({ manual_debt: 0 }).eq('id', resident.id)
       ]);
       showToast(`Wiped history for ${resident.name}`, "success");
-      fetchAdminData(true);
+      setTimeout(handleRefresh, 1000);
     } catch (err) {
       showToast("Failed", "error");
     }
@@ -164,28 +167,22 @@ const AdminDashboard = () => {
   };
 
   const executeUndo = async (item) => {
-    const originalExpenses = [...expenses];
-    const originalPayments = [...payments];
-    if (item.type === 'PAYMENT') setPayments(prev => prev.filter(p => p.id !== item.id));
-    else setExpenses(prev => prev.filter(e => e.id !== item.id));
-
+    if (String(item.id).startsWith('initial-')) return;
     try {
       const table = item.type === 'PAYMENT' ? 'payments' : 'expenses';
       const { error } = await supabase.from(table).delete().eq('id', item.id);
       if (error) throw error;
       showToast(`Undo successful`, "success");
-      fetchAdminData(true);
+      setTimeout(handleRefresh, 1000);
     } catch (err) {
       showToast("Undo failed: " + err.message, "error");
-      setExpenses(originalExpenses);
-      setPayments(originalPayments);
     }
   };
 
   const handleUndo = (item) => {
     triggerConfirm({
       title: "Undo Transaction?",
-      message: `Delete this ${item.type === 'PAYMENT' ? 'payment' : 'debt'} for ${item.profiles?.name}?`,
+      message: `Delete this ${item.type === 'PAYMENT' ? 'payment' : 'debt'} for ${item.profiles?.name || item.name}?`,
       onConfirm: () => executeUndo(item),
       confirmText: "Yes, Delete"
     });
@@ -197,12 +194,13 @@ const AdminDashboard = () => {
       ...payments.map(p => ({ ...p, type: 'PAYMENT', timestamp: p.created_at }))
     ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-    if (allActivity.length === 0) {
-      showToast("No transactions found", "info");
+    const validActions = allActivity.filter(a => !String(a.id).startsWith('initial-'));
+    if (validActions.length === 0) {
+      showToast("No undoable transactions found", "info");
       return;
     }
 
-    const lastAction = allActivity[0];
+    const lastAction = validActions[0];
     triggerConfirm({
       title: "Undo Last Action?",
       message: `Revert the most recent ${lastAction.type === 'PAYMENT' ? 'payment' : 'debt'} for ${lastAction.profiles?.name}?`,
@@ -210,6 +208,35 @@ const AdminDashboard = () => {
       confirmText: "Undo Action"
     });
   };
+
+  // Combine expenses and manual debts for "Pending Collections"
+  const pendingCollections = [
+    ...expenses.filter(e => e.status !== 'Paid').map(e => ({
+      id: e.id,
+      name: e.profiles?.name,
+      category: e.category,
+      amount: e.amount,
+      date: e.due_date,
+      type: 'EXPENSE'
+    })),
+    ...boarders.filter(b => {
+      // Logic for remaining manual debt: manual_debt - general_payments
+      // But let's simplify and show the starting balance if balance > sum(unpaid_expenses)
+      const unpaidExp = expenses.filter(e => e.boarder_id === b.id && e.status !== 'Paid').reduce((s, e) => s + parseFloat(e.amount), 0);
+      return (parseFloat(b.balance) - unpaidExp) > 0;
+    }).map(b => {
+      const unpaidExp = expenses.filter(e => e.boarder_id === b.id && e.status !== 'Paid').reduce((s, e) => s + parseFloat(e.amount), 0);
+      const remainingInitial = Math.max(0, parseFloat(b.balance) - unpaidExp);
+      return {
+        id: `pending-initial-${b.id}`,
+        name: b.name,
+        category: 'Initial Balance',
+        amount: remainingInitial,
+        date: b.manual_debt_date || b.created_at,
+        type: 'INITIAL'
+      };
+    })
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
   return (
     <div className="fade-in">
@@ -322,19 +349,19 @@ const AdminDashboard = () => {
           {loading ? <TableSkeleton rows={3} /> : (
             <div className="glass-card" style={{ padding: '0', overflow: 'hidden', borderRadius: '16px' }}>
               <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                {expenses.filter(e => e.status !== 'Paid').length === 0 ? (
+                {pendingCollections.length === 0 ? (
                   <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text2)' }}>All debts collected! ✨</div>
                 ) : (
-                  expenses.filter(e => e.status !== 'Paid').map(exp => (
-                    <div key={exp.id} style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  pendingCollections.map(item => (
+                    <div key={item.id} style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div style={{ fontWeight: '700', fontSize: '14px' }}>{exp.profiles?.name}</div>
+                        <div style={{ fontWeight: '700', fontSize: '14px' }}>{item.name}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                          <CategoryBadge category={exp.category} type="DEBT" />
-                          <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatShortDate(exp.due_date)}</span>
+                          <CategoryBadge category={item.category} type="DEBT" />
+                          <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatShortDate(item.date)}</span>
                         </div>
                       </div>
-                      <div style={{ fontWeight: '800', color: 'white' }}>{formatCurrency(exp.amount)}</div>
+                      <div style={{ fontWeight: '800', color: 'white' }}>{formatCurrency(item.amount)}</div>
                     </div>
                   ))
                 )}
@@ -347,8 +374,22 @@ const AdminDashboard = () => {
           {loading ? <TableSkeleton rows={3} /> : (
             <div className="glass-card" style={{ padding: '0', overflow: 'hidden', borderRadius: '16px' }}>
               <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                {[...expenses.map(e => ({...e, type: 'DEBT'})), ...payments.map(p => ({...p, type: 'PAYMENT'}))]
-                  .sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date))
+                {[
+                  ...expenses.map(e => ({...e, type: 'DEBT', timestamp: e.created_at})), 
+                  ...payments.map(p => ({...p, type: 'PAYMENT', timestamp: p.date || p.created_at})),
+                  ...boarders
+                    .filter(b => parseFloat(b.manual_debt || 0) > 0)
+                    .map(b => ({
+                      id: `initial-${b.id}`,
+                      type: 'DEBT',
+                      category: 'Initial Balance',
+                      amount: b.manual_debt,
+                      created_at: b.manual_debt_date || b.created_at,
+                      timestamp: b.manual_debt_date || b.created_at,
+                      name: b.name
+                    }))
+                ]
+                  .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
                   .slice(0, 30)
                   .map((item, idx) => (
                     <div key={idx} style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
@@ -357,10 +398,10 @@ const AdminDashboard = () => {
                           {item.type === 'PAYMENT' ? <TrendingUp size={14} style={{ color: 'var(--success)' }} /> : <AlertCircle size={14} style={{ color: 'var(--danger)' }} />}
                         </div>
                         <div>
-                          <div style={{ fontSize: '13px', fontWeight: '700' }}>{item.profiles?.name}</div>
+                          <div style={{ fontSize: '13px', fontWeight: '700' }}>{item.profiles?.name || item.name}</div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                             <CategoryBadge category={item.type === 'PAYMENT' ? 'Payment' : item.category} type={item.type} />
-                            <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatShortDate(item.created_at || item.date)}</span>
+                            <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatShortDate(item.timestamp)}</span>
                           </div>
                         </div>
                       </div>
@@ -368,7 +409,9 @@ const AdminDashboard = () => {
                         <div style={{ fontWeight: '800', color: item.type === 'PAYMENT' ? 'var(--success)' : 'white', fontSize: '14px' }}>
                           {item.type === 'PAYMENT' ? '+' : '-'}{parseFloat(item.amount).toLocaleString()}
                         </div>
-                        <button className="act-btn danger" onClick={() => handleUndo(item)} title="Undo Transaction" style={{ width: '28px', height: '28px', padding: 0, opacity: 0.4 }}><Trash2 size={12} /></button>
+                        {!String(item.id).startsWith('initial-') && (
+                          <button className="act-btn danger" onClick={() => handleUndo(item)} title="Undo Transaction" style={{ width: '28px', height: '28px', padding: 0, opacity: 0.4 }}><Trash2 size={12} /></button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -378,9 +421,9 @@ const AdminDashboard = () => {
         </Section>
       </div>
 
-      <ExpenseModal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} boarders={boarders} onSave={() => fetchAdminData(true)} />
-      <UserModal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} editingUser={editingItem} onSave={() => fetchAdminData(true)} />
-      <PaymentModal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} boarders={boarders} expenses={expenses} onSave={() => fetchAdminData(true)} />
+      <ExpenseModal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} boarders={boarders} onSave={handleRefresh} />
+      <UserModal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} editingUser={editingItem} onSave={handleRefresh} />
+      <PaymentModal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} boarders={boarders} expenses={expenses} onSave={handleRefresh} />
       <HistoryModal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} user={selectedResident} />
       
       <ConfirmationModal 

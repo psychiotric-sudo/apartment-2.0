@@ -11,7 +11,7 @@ import DataValidator from './components/common/DataValidator';
 
 const PublicRoute = ({ children }) => {
   const { session } = useAuth();
-  return session ? <Navigate to="/" replace /> : children;
+  return session ? <Navigate to="/dashboard" replace /> : children;
 };
 
 function App() {
@@ -33,9 +33,9 @@ function App() {
         <Routes>
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-            <Route path="/" element={<RoleBasedRouter />} />
-            <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/dashboard" element={<RoleBasedRouter />} />
           </Route>
+          <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </AuthProvider>

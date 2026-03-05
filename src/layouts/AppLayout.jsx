@@ -21,6 +21,29 @@ const AppLayout = () => {
   const { user, logout } = useAuth();
   const { showToast } = useNotify();
   const navigate = useNavigate();
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatDate = (date) => {
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+  };
+
+  const formatTime = (date) => {
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true 
+    });
+  };
 
   useEffect(() => {
     if (isDark) {
@@ -78,9 +101,13 @@ const AppLayout = () => {
             <div>
               <h1 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: 'white', letterSpacing: '-0.5px' }}>AptManager</h1>
               {user && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
                   <span className={`badge ${user.role === 'Admin' ? 'badge-admin' : ''}`} style={{ fontSize: '9px' }}>
                     {user.role}
+                  </span>
+                  <div style={{ height: '3px', width: '3px', borderRadius: '50%', background: 'var(--text2)', opacity: 0.3 }}></div>
+                  <span style={{ fontSize: '10px', fontWeight: '600', color: 'var(--text2)', opacity: 0.8, letterSpacing: '0.2px' }}>
+                    {formatDate(currentTime)} • {formatTime(currentTime)}
                   </span>
                 </div>
               )}

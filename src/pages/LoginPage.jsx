@@ -15,7 +15,7 @@ const LoginPage = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (session) {
-      navigate('/', { replace: true });
+      navigate('/dashboard', { replace: true });
     }
   }, [session, navigate]);
 

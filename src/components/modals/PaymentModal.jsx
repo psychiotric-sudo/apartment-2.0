@@ -36,10 +36,39 @@ const PaymentModal = ({ isOpen, onClose, boarders, expenses, onSave }) => {
         </div>
         <form onSubmit={handleSubmit}>
           <div className="field">
-            <label>Who is paying?</label>
-            <div className="chip-group" style={{ background: 'var(--glass-light)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', maxHeight: '160px', overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '8px' }}>
+            <label style={{ marginBottom: '12px', display: 'block' }}>Who is paying?</label>
+            <div className="chip-group" style={{ 
+              background: 'rgba(0,0,0,0.1)', 
+              padding: '16px', 
+              borderRadius: '16px', 
+              border: '1px solid var(--border)', 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', 
+              gap: '10px' 
+            }}>
               {boarders.map(b => (
-                <button key={b.id} type="button" className={`chip ${formData.boarder_id === b.id ? 'selected' : ''}`} onClick={() => setFormData({...formData, boarder_id: b.id, expense_id: ''})} style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}><User size={12} />{b.name}</button>
+                <button 
+                  key={b.id} 
+                  type="button" 
+                  className={`chip ${formData.boarder_id === b.id ? 'selected' : ''}`} 
+                  onClick={() => setFormData({...formData, boarder_id: b.id, expense_id: ''})} 
+                  style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    gap: '6px', 
+                    width: '100%',
+                    padding: '12px 8px',
+                    height: 'auto',
+                    minHeight: '60px',
+                    borderRadius: '12px',
+                    textAlign: 'center'
+                  }}
+                >
+                  <User size={16} style={{ opacity: 0.6 }} />
+                  <span style={{ fontSize: '12px', fontWeight: '700', lineHeight: '1.2' }}>{b.name}</span>
+                </button>
               ))}
             </div>
           </div>
