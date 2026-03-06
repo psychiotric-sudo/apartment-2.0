@@ -1,11 +1,14 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { CheckCircle, AlertCircle, Info, X } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, X, Bell } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 const NotificationContext = createContext();
 
 export const NotificationProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   const removeToast = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -20,14 +23,6 @@ export const NotificationProvider = ({ children }) => {
       sendBrowserNotification(type.toUpperCase(), message);
     }
   }, [removeToast]);
-
-  const requestPermission = async () => {
-    if (!("Notification" in window)) return;
-    const permission = await Notification.requestPermission();
-    if (permission === "granted") {
-      showToast("Notifications enabled!", "success");
-    }
-  };
 
   const sendBrowserNotification = (title, body) => {
     if (Notification.permission === "granted") {
@@ -46,52 +41,131 @@ export const NotificationProvider = ({ children }) => {
     }
   };
 
-  useEffect(() => {
-    const setupRealtime = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.user) return;
+  const fetchNotifications = useCallback(async (userId) => {
+    if (!userId) return;
 
-        const channel = supabase.channel('push-notifications')
-          .on('postgres_changes', { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'expenses',
-            filter: `boarder_id=eq.${session.user.id}` 
-          }, (payload) => {
-            sendBrowserNotification('New Debt Recorded', `You have a new expense: ${payload.new.category} for ₱${payload.new.amount}`);
-          })
-          .on('postgres_changes', { 
-            event: 'UPDATE', 
-            schema: 'public', 
-            table: 'expenses',
-            filter: `boarder_id=eq.${session.user.id}` 
-          }, (payload) => {
-            if (payload.new.status === 'Paid') {
-              sendBrowserNotification('Debt Cleared', `Your ${payload.new.category} expense has been marked as Paid.`);
-            }
-          })
-          .on('postgres_changes', { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'payments',
-            filter: `boarder_id=eq.${session.user.id}` 
-          }, (payload) => {
-            sendBrowserNotification('Payment Received', `A payment of ₱${payload.new.amount} has been recorded.`);
-          })
-          .subscribe();
+    // Fetch from both tables where notif_title is present
+    const [expensesRes, paymentsRes] = await Promise.all([
+      supabase.from('expenses')
+        .select('id, notif_title, notif_message, is_read, created_at, category, amount')
+        .eq('boarder_id', userId)
+        .not('notif_title', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(10),
+      supabase.from('payments')
+        .select('id, notif_title, notif_message, is_read, created_at, category, amount')
+        .eq('boarder_id', userId)
+        .not('notif_title', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(10)
+    ]);
 
-        return () => supabase.removeChannel(channel);
-      } catch (err) {
-        console.error("Supabase Realtime setup failed:", err);
-      }
-    };
+    const combined = [
+      ...(expensesRes.data || []).map(e => ({ ...e, type: 'warning', table: 'expenses' })),
+      ...(paymentsRes.data || []).map(p => ({ ...p, type: 'success', table: 'payments' }))
+    ]
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 20);
 
-    setupRealtime();
+    setNotifications(combined);
+    setUnreadCount(combined.filter(n => !n.is_read).length);
   }, []);
 
+  const markAsRead = async (id, table) => {
+    const { error } = await supabase
+      .from(table)
+      .update({ is_read: true })
+      .eq('id', id);
+    
+    if (!error) {
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    }
+  };
+
+  const markAllAsRead = async () => {
+    if (!currentUserId) return;
+
+    await Promise.all([
+      supabase.from('expenses').update({ is_read: true }).eq('boarder_id', currentUserId).eq('is_read', false),
+      supabase.from('payments').update({ is_read: true }).eq('boarder_id', currentUserId).eq('is_read', false)
+    ]);
+    
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    setUnreadCount(0);
+  };
+
+  const requestPermission = async () => {
+    if (!("Notification" in window)) return;
+    const permission = await Notification.requestPermission();
+    if (permission === "granted") {
+      showToast("Notifications enabled!", "success");
+    }
+  };
+
+  useEffect(() => {
+    let exChannel, payChannel;
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const userId = session?.user?.id;
+      
+      if (userId) {
+        setCurrentUserId(userId);
+        fetchNotifications(userId);
+
+        if (exChannel) supabase.removeChannel(exChannel);
+        if (payChannel) supabase.removeChannel(payChannel);
+        
+        exChannel = supabase.channel(`ex-notifs-${userId}`)
+          .on('postgres_changes', { 
+            event: '*', schema: 'public', table: 'expenses', 
+            filter: `boarder_id=eq.${userId}` 
+          }, (payload) => {
+            if (payload.new.notif_title) {
+              fetchNotifications(userId);
+              if (payload.eventType === 'INSERT' || (payload.old.notif_title !== payload.new.notif_title)) {
+                showToast(payload.new.notif_message, 'warning');
+              }
+            }
+          }).subscribe();
+
+        payChannel = supabase.channel(`pay-notifs-${userId}`)
+          .on('postgres_changes', { 
+            event: '*', schema: 'public', table: 'payments', 
+            filter: `boarder_id=eq.${userId}` 
+          }, (payload) => {
+            if (payload.new.notif_title) {
+              fetchNotifications(userId);
+              if (payload.eventType === 'INSERT' || (payload.old.notif_title !== payload.new.notif_title)) {
+                showToast(payload.new.notif_message, 'success');
+              }
+            }
+          }).subscribe();
+      } else {
+        setCurrentUserId(null);
+        setNotifications([]);
+        setUnreadCount(0);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      if (exChannel) supabase.removeChannel(exChannel);
+      if (payChannel) supabase.removeChannel(payChannel);
+    };
+  }, [fetchNotifications, showToast]);
+
   return (
-    <NotificationContext.Provider value={{ showToast, sendBrowserNotification, requestPermission }}>
+    <NotificationContext.Provider value={{ 
+      showToast, 
+      sendBrowserNotification, 
+      requestPermission,
+      notifications,
+      unreadCount,
+      markAsRead,
+      markAllAsRead,
+      fetchNotifications: () => fetchNotifications(currentUserId)
+    }}>
       {children}
       <div style={{ 
         position: 'fixed', top: '24px', right: '24px', zIndex: 9999, 
@@ -105,7 +179,7 @@ export const NotificationProvider = ({ children }) => {
           }}>
             {t.type === 'success' && <CheckCircle size={18} color="var(--success)" />}
             {t.type === 'error' && <AlertCircle size={18} color="var(--danger)" />}
-            {t.type === 'info' && <Info size={18} color="var(--accent)" />}
+            {(t.type === 'info' || t.type === 'warning') && <Info size={18} color="var(--accent)" />}
             <span style={{ flex: 1, fontSize: '14px', fontWeight: '600', color: 'var(--text)' }}>{t.message}</span>
             <button onClick={() => removeToast(t.id)} style={{ opacity: 0.5, marginLeft: '10px' }}><X size={16} /></button>
           </div>

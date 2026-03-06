@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { X, User, Moon, Sun, Shield, Save, Lock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, User, Moon, Sun, Shield, Save, Lock, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotify } from '../../context/NotificationContext';
 import { supabase } from '../../lib/supabase';
 import DeveloperModal from './DeveloperModal';
+
+import { config } from '../../config';
 
 const SettingsModal = ({ isOpen, onClose, isDark, onToggleTheme }) => {
   const { user, updatePassword } = useAuth();
@@ -15,17 +17,51 @@ const SettingsModal = ({ isOpen, onClose, isDark, onToggleTheme }) => {
   const [passLoading, setPassLoading] = useState(false);
   const [showDev, setShowDev] = useState(false);
 
+  useEffect(() => {
+    if (user?.name) setName(user.name);
+    
+    if (isOpen) document.body.classList.add('modal-open');
+    else document.body.classList.remove('modal-open');
+    
+    return () => document.body.classList.remove('modal-open');
+  }, [user, isOpen]);
+
   if (!isOpen) return null;
+
+  const nameChangesCount = user?.name_changes_count || 0;
+  const changesLeft = 2 - nameChangesCount;
+  const isNameLocked = changesLeft <= 0;
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
+    if (!name.trim()) return;
+    
+    if (name !== user.name) {
+      if (isNameLocked) {
+        showToast("Name change limit reached (Max 2)", "error");
+        return;
+      }
+    }
+
     setLoading(true);
     try {
-      await supabase.from('profiles').update({ name }).eq('id', user.id);
+      const updates = { 
+        name,
+        name_changes_count: name !== user.name ? nameChangesCount + 1 : nameChangesCount
+      };
+
+      const { error } = await supabase.from('profiles').update(updates).eq('id', user.id);
+      if (error) throw error;
+
       showToast("Profile updated!", "success");
       onClose();
+      // Force reload to refresh AuthContext user data
       setTimeout(() => window.location.reload(), 1000);
-    } catch (err) { showToast(err.message, "error"); } finally { setLoading(false); }
+    } catch (err) { 
+      showToast(err.message, "error"); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handlePasswordChange = async (e) => {
@@ -72,11 +108,36 @@ const SettingsModal = ({ isOpen, onClose, isDark, onToggleTheme }) => {
             </div>
 
             <form onSubmit={handleSaveProfile} className="field">
-              <label style={{ fontSize: '12px', opacity: 0.6, textTransform: 'uppercase' }}>Personal Info</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label style={{ fontSize: '12px', opacity: 0.6, textTransform: 'uppercase' }}>Personal Info</label>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: isNameLocked ? 'var(--danger)' : 'var(--accent)' }}>
+                  {changesLeft} Name Changes Left
+                </span>
+              </div>
+              
               <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full Name" />
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type="text" value={name} 
+                    onChange={(e) => setName(e.target.value)} 
+                    placeholder="Full Name" 
+                    disabled={isNameLocked}
+                    style={{ opacity: isNameLocked ? 0.6 : 1 }}
+                  />
+                  {isNameLocked && <Lock size={14} style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }} />}
+                </div>
+
+                {isNameLocked && (
+                  <div style={{ padding: '10px 14px', borderRadius: '10px', background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.2)', display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                    <AlertTriangle size={16} color="var(--danger)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <p style={{ fontSize: '11px', color: 'var(--danger)', lineHeight: '1.4', margin: 0 }}>
+                      <strong>Warning:</strong> You have reached the name change limit. Your name is now permanent. Contact Admin for corrections.
+                    </p>
+                  </div>
+                )}
+
                 <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(0,0,0,0.1)', fontSize: '12px', color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: '8px' }}><Shield size={14} /> Role: {user?.role}</div>
-                <button className="btn btn-primary" style={{ width: '100%' }} disabled={loading}><Save size={18} /> Save Profile</button>
+                <button className="btn btn-primary" style={{ width: '100%' }} disabled={loading || (isNameLocked && name === user.name)}><Save size={18} /> Save Profile</button>
               </div>
             </form>
 
@@ -104,7 +165,7 @@ const SettingsModal = ({ isOpen, onClose, isDark, onToggleTheme }) => {
             </form>
 
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-              <p style={{ fontSize: '11px', color: 'var(--text2)' }}>AptManager v1.2</p>
+              <p style={{ fontSize: '11px', color: 'var(--text2)' }}>AptManager v{config.version}</p>
               <p style={{ fontSize: '11px', color: 'var(--text2)' }}>
                 Developer: <button onClick={() => setShowDev(true)} style={{ background: 'none', border: 'none', color: 'var(--accent)', padding: 0, font: 'inherit', cursor: 'pointer', fontWeight: '700' }}>@chqrlzz</button>
               </p>

@@ -5,7 +5,7 @@ import { useNotify } from '../../context/NotificationContext';
 import { formatCurrency, formatShortDate, formatDateTimeWithPHT } from '../../utils/formatters';
 import { 
   Users as UsersIcon, AlertCircle, CreditCard, PlusCircle, 
-  UserPlus, Edit, Trash2, RefreshCw, List, ReceiptText, Shield, Zap, TrendingUp, Search, History, RotateCcw, Crown
+  UserPlus, Edit, Trash2, RefreshCw, List, ReceiptText, Shield, Zap, TrendingUp, Search, History, RotateCcw, Crown, Layers, Settings2
 } from 'lucide-react';
 import { StatCard, DashboardHeader, Section } from '../../components/common/DashboardUI';
 import { CardSkeleton, TableSkeleton } from '../../components/common/Skeleton';
@@ -16,18 +16,18 @@ import HistoryModal from '../../components/modals/HistoryModal';
 import ConfirmationModal from '../../components/modals/ConfirmationModal';
 
 const CategoryBadge = ({ category, type }) => {
-  if (type === 'PAYMENT') return <span className="badge badge-success">Payment</span>;
-  
   const catLower = (category || '').toLowerCase();
   let className = 'badge';
+  
   if (catLower.includes('initial')) className += ' badge-initial';
   else if (catLower.includes('rent')) className += ' badge-rent';
   else if (catLower.includes('electricity')) className += ' badge-electricity';
   else if (catLower.includes('water')) className += ' badge-water';
   else if (catLower.includes('gas')) className += ' badge-gas';
   else if (catLower.includes('food') || catLower.includes('meal')) className += ' badge-food';
+  else if (type === 'PAYMENT') className += ' badge-success';
   
-  return <span className={className}>{category}</span>;
+  return <span className={className}>{category || 'Payment'}</span>;
 };
 
 const AdminDashboard = () => {
@@ -45,13 +45,20 @@ const AdminDashboard = () => {
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [editingPayment, setEditingPayment] = useState(null);
 
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, onConfirm: () => {}, title: '', message: '', strict: false, danger: false });
 
   const closeConfirm = () => setConfirmConfig(prev => ({ ...prev, isOpen: false }));
   const triggerConfirm = (config) => setConfirmConfig({ ...config, isOpen: true });
 
-  const handleRefresh = () => window.location.reload();
+  const handleRefresh = () => {
+    fetchAdminData(true);
+    setEditingExpense(null);
+    setEditingPayment(null);
+    setEditingItem(null);
+  };
 
   const fetchAdminData = useCallback(async (silent = false) => {
     try {
@@ -191,7 +198,7 @@ const AdminDashboard = () => {
   const handleUndoLastAction = async () => {
     const allActivity = [
       ...expenses.map(e => ({ ...e, type: 'DEBT', timestamp: e.created_at })),
-      ...payments.map(p => ({ ...p, type: 'PAYMENT', timestamp: p.created_at }))
+      ...payments.map(p => ({ ...p, type: 'PAYMENT', timestamp: p.date || p.created_at }))
     ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
     const validActions = allActivity.filter(a => !String(a.id).startsWith('initial-'));
@@ -209,7 +216,6 @@ const AdminDashboard = () => {
     });
   };
 
-  // Combine expenses and manual debts for "Pending Collections"
   const pendingCollections = [
     ...expenses.filter(e => e.status !== 'Paid').map(e => ({
       id: e.id,
@@ -220,8 +226,6 @@ const AdminDashboard = () => {
       type: 'EXPENSE'
     })),
     ...boarders.filter(b => {
-      // Logic for remaining manual debt: manual_debt - general_payments
-      // But let's simplify and show the starting balance if balance > sum(unpaid_expenses)
       const unpaidExp = expenses.filter(e => e.boarder_id === b.id && e.status !== 'Paid').reduce((s, e) => s + parseFloat(e.amount), 0);
       return (parseFloat(b.balance) - unpaidExp) > 0;
     }).map(b => {
@@ -240,22 +244,10 @@ const AdminDashboard = () => {
 
   return (
     <div className="fade-in">
-      <DashboardHeader title={`Hi, ${user.name.split(' ')[0]}! 👋`} description="System Administrator Access">
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button className="btn btn-secondary" onClick={handleUndoLastAction} style={{ padding: '8px 16px', fontSize: '12px', borderColor: 'var(--accent-glow)' }}>
-            <RotateCcw size={14} />
-            <span style={{ marginLeft: '8px' }}>Undo Last</span>
-          </button>
-          <button className="btn btn-secondary" onClick={handleRepair} disabled={isRepairing} style={{ padding: '8px 16px', fontSize: '12px' }}>
-            {isRepairing ? <RefreshCw size={14} className="animate-spin" /> : <Shield size={14} />}
-            <span style={{ marginLeft: '8px' }}>Repair</span>
-          </button>
-          <button className="btn btn-secondary" onClick={handleGlobalReset} style={{ padding: '8px 16px', fontSize: '12px', borderColor: 'rgba(239, 68, 68, 0.2)', color: 'var(--danger)' }}>
-            <Trash2 size={14} />
-            <span style={{ marginLeft: '8px' }}>Wipe All</span>
-          </button>
-        </div>
-      </DashboardHeader>
+      <DashboardHeader 
+        title={`Hi, ${user.name.split(' ')[0]}! 👋`} 
+        description="System Administrator Access"
+      />
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '40px' }}>
@@ -263,22 +255,45 @@ const AdminDashboard = () => {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '40px' }}>
-          <StatCard label="Residents" value={boarders.length} icon={UsersIcon} trend="+2 new" />
-          <StatCard label="Collectibles" value={formatCurrency(totalUnpaid)} icon={AlertCircle} color="var(--danger)" trend="Pending" />
-          <StatCard label="Revenue" value={formatCurrency(totalCollected)} icon={TrendingUp} color="var(--success)" trend="Total" />
+          <StatCard label="Residents" value={boarders.length} icon={UsersIcon} />
+          <StatCard label="Collectibles" value={formatCurrency(totalUnpaid)} icon={AlertCircle} color="var(--danger)" />
+          <StatCard label="Revenue" value={formatCurrency(totalCollected)} icon={TrendingUp} color="var(--success)" />
         </div>
       )}
 
-      <div className="fab-container" style={{ position: 'static', display: 'flex', gap: '12px', marginBottom: '48px', flexWrap: 'wrap' }}>
-        <button className="btn btn-primary" style={{ borderRadius: '12px' }} onClick={() => { setEditingItem(null); setIsUserModalOpen(true); }}>
-          <UserPlus size={18} /> New Resident
-        </button>
-        <button className="btn btn-primary" style={{ borderRadius: '12px' }} onClick={() => { setEditingItem(null); setIsExpenseModalOpen(true); }}>
-          <PlusCircle size={18} /> Add Debt
-        </button>
-        <button className="btn btn-primary" style={{ borderRadius: '12px' }} onClick={() => { setEditingItem(null); setIsPaymentModalOpen(true); }}>
-          <CreditCard size={18} /> Record Payment
-        </button>
+      {/* REFINED ACTIONS BAR */}
+      <div style={{ 
+        background: 'rgba(255,255,255,0.02)', 
+        border: '1px solid var(--border)', 
+        borderRadius: '16px', 
+        padding: '24px', 
+        marginBottom: '48px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '24px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ background: 'var(--accent-glow)', padding: '10px', borderRadius: '12px' }}>
+            <Layers size={20} color="var(--accent)" />
+          </div>
+          <div>
+            <span style={{ fontSize: '14px', fontWeight: '900', color: 'white', letterSpacing: '0.05em' }}>QUICK ACTIONS</span>
+            <p style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '2px' }}>Primary management operations</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <button className="btn btn-primary" onClick={() => { setEditingItem(null); setIsUserModalOpen(true); }}>
+            <UserPlus size={18} /> <span>Resident</span>
+          </button>
+          <button className="btn btn-primary" onClick={() => { setEditingExpense(null); setIsExpenseModalOpen(true); }}>
+            <PlusCircle size={18} /> <span>Add Debt</span>
+          </button>
+          <button className="btn btn-primary" onClick={() => { setEditingPayment(null); setIsPaymentModalOpen(true); }}>
+            <CreditCard size={18} /> <span>Payment</span>
+          </button>
+        </div>
       </div>
 
       <Section title="Resident Directory" icon={UsersIcon} action={
@@ -294,11 +309,11 @@ const AdminDashboard = () => {
         {loading ? <TableSkeleton rows={4} /> : (
           <div className="glass-card" style={{ padding: '0', overflow: 'hidden', borderRadius: '16px' }}>
             <table style={{ tableLayout: 'fixed', width: '100%', borderCollapse: 'collapse' }}>
-              <thead style={{ background: 'var(--glass-light)' }}>
+              <thead style={{ background: 'rgba(255,255,255,0.02)' }}>
                 <tr>
-                  <th style={{ width: '35%', padding: '16px 24px' }}>Name</th>
-                  <th style={{ width: '25%', padding: '16px 24px' }}>Debt</th>
-                  <th style={{ width: '20%', padding: '16px 24px' }}>Status</th>
+                  <th style={{ width: '35%', padding: '16px 24px', textAlign: 'left' }}>Name</th>
+                  <th style={{ width: '25%', padding: '16px 24px', textAlign: 'left' }}>Debt</th>
+                  <th style={{ width: '20%', padding: '16px 24px', textAlign: 'left' }}>Status</th>
                   <th style={{ width: '20%', padding: '16px 24px', textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
@@ -314,7 +329,7 @@ const AdminDashboard = () => {
                     const crownColor = isTop1 ? '#FFD700' : isTop2 ? '#C0C0C0' : isTop3 ? '#CD7F32' : null;
 
                     return (
-                      <tr key={b.id} style={{ borderTop: '1px solid var(--border)', background: crownColor ? `linear-gradient(90deg, ${crownColor}10 0%, transparent 100%)` : 'transparent' }}>
+                      <tr key={b.id} style={{ borderTop: '1px solid var(--border)', background: crownColor ? `linear-gradient(90deg, ${crownColor}08 0%, transparent 100%)` : 'transparent' }}>
                         <td style={{ padding: '16px 24px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             {crownColor && <Crown size={16} color={crownColor} fill={crownColor} style={{ filter: 'drop-shadow(0 0 4px ' + crownColor + '40)' }} />}
@@ -323,14 +338,18 @@ const AdminDashboard = () => {
                           <div style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '2px', paddingLeft: crownColor ? '24px' : '0' }}>@{b.username}</div>
                         </td>
                       <td style={{ padding: '16px 24px' }}>
-                        <div style={{ fontWeight: '800', color: debt > 0 ? 'var(--danger)' : 'var(--success)', fontSize: '15px' }}>{debt > 0 ? formatCurrency(debt) : 'CLEAR'}</div>
+                        <div style={{ fontWeight: '800', color: debt > 0 ? 'var(--danger)' : debt < 0 ? 'var(--success)' : 'var(--text2)', fontSize: '15px' }}>
+                          {debt > 0 ? formatCurrency(debt) : debt < 0 ? `+${formatCurrency(Math.abs(debt))}` : 'CLEAR'}
+                        </div>
                       </td>
                       <td style={{ padding: '16px 24px' }}>
-                        <span className={`badge ${debt === 0 ? 'badge-success' : 'badge-warn'}`} style={{ padding: '4px 10px', fontSize: '10px' }}>{debt === 0 ? 'Settled' : 'Unpaid'}</span>
+                        <span className={`badge ${debt > 0 ? 'badge-warn' : 'badge-success'}`}>
+                          {debt > 0 ? 'Unpaid' : debt < 0 ? 'Advance' : 'Settled'}
+                        </span>
                       </td>
                       <td style={{ padding: '16px 24px' }}>
-                        <div className="actions" style={{ justifyContent: 'flex-end', gap: '8px' }}>
-                          <button className="act-btn" onClick={() => handleBackToZero(b)} title="Wipe History" style={{ background: 'rgba(108, 140, 255, 0.1)', color: 'var(--accent)' }}><Zap size={14} fill="currentColor" /></button>
+                        <div className="actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                          <button className="act-btn" onClick={() => handleBackToZero(b)} title="Wipe History" style={{ color: 'var(--accent)' }}><Zap size={14} fill="currentColor" /></button>
                           <button className="act-btn" onClick={() => { setSelectedResident(b); setIsHistoryModalOpen(true); }} title="History"><History size={14} /></button>
                           <button className="act-btn" onClick={() => { setEditingItem(b); setIsUserModalOpen(true); }} title="Edit"><Edit size={14} /></button>
                         </div>
@@ -344,87 +363,160 @@ const AdminDashboard = () => {
         )}
       </Section>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '32px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '32px', marginBottom: '64px' }}>
         <Section title="Pending Collections" icon={ReceiptText}>
-          {loading ? <TableSkeleton rows={3} /> : (
-            <div className="glass-card" style={{ padding: '0', overflow: 'hidden', borderRadius: '16px' }}>
-              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                {pendingCollections.length === 0 ? (
-                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text2)' }}>All debts collected! ✨</div>
-                ) : (
-                  pendingCollections.map(item => (
-                    <div key={item.id} style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ fontWeight: '700', fontSize: '14px' }}>{item.name}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                          <CategoryBadge category={item.category} type="DEBT" />
-                          <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatShortDate(item.date)}</span>
-                        </div>
+          <div className="glass-card" style={{ padding: '0', overflow: 'hidden' }}>
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              {pendingCollections.length === 0 ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text2)' }}>All debts collected! ✨</div>
+              ) : (
+                pendingCollections.map(item => (
+                  <div key={item.id} style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: '700', fontSize: '14px' }}>{item.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                        <CategoryBadge category={item.category} type="DEBT" />
+                        <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatShortDate(item.date)}</span>
                       </div>
-                      <div style={{ fontWeight: '800', color: 'white' }}>{formatCurrency(item.amount)}</div>
                     </div>
-                  ))
-                )}
-              </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ fontWeight: '800', color: 'white' }}>{formatCurrency(item.amount)}</div>
+                      {item.type === 'EXPENSE' && (
+                        <button className="act-btn" onClick={() => {
+                          setEditingExpense(expenses.find(e => e.id === item.id));
+                          setIsExpenseModalOpen(true);
+                        }} title="Edit Debt"><Edit size={12} /></button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          )}
+          </div>
         </Section>
 
         <Section title="Recent Activity" icon={History}>
-          {loading ? <TableSkeleton rows={3} /> : (
-            <div className="glass-card" style={{ padding: '0', overflow: 'hidden', borderRadius: '16px' }}>
-              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                {[
-                  ...expenses.map(e => ({...e, type: 'DEBT', timestamp: e.created_at || e.due_date})), 
-                  ...payments.map(p => ({...p, type: 'PAYMENT', timestamp: p.date || p.created_at})),
-                  ...boarders
-                    .filter(b => parseFloat(b.manual_debt || 0) > 0)
-                    .map(b => ({
-                      id: `initial-${b.id}`,
-                      type: 'DEBT',
-                      category: 'Initial Balance',
-                      amount: b.manual_debt,
-                      created_at: b.manual_debt_date || b.created_at,
-                      timestamp: b.manual_debt_date || b.created_at,
-                      name: b.name
-                    }))
-                ]
-                  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                  .slice(0, 30)
-                  .map((item, idx) => (
-                    <div key={idx} style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: item.type === 'PAYMENT' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          {item.type === 'PAYMENT' ? <TrendingUp size={14} style={{ color: 'var(--success)' }} /> : <AlertCircle size={14} style={{ color: 'var(--danger)' }} />}
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '13px', fontWeight: '700' }}>{item.profiles?.name || item.name}</div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                            <CategoryBadge category={item.type === 'PAYMENT' ? 'Payment' : item.category} type={item.type} />
-                            <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatDateTimeWithPHT(item.timestamp)}</span>
-                          </div>
-                        </div>
+          <div className="glass-card" style={{ padding: '0', overflow: 'hidden' }}>
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              {[
+                ...expenses.map(e => ({...e, type: 'DEBT', timestamp: e.due_date || e.created_at})), 
+                ...payments.map(p => ({...p, type: 'PAYMENT', timestamp: p.date || p.created_at})),
+                ...boarders
+                  .filter(b => parseFloat(b.manual_debt || 0) > 0)
+                  .map(b => ({
+                    id: `initial-${b.id}`,
+                    type: 'DEBT',
+                    category: 'Initial Balance',
+                    amount: b.manual_debt,
+                    created_at: b.manual_debt_date || b.created_at,
+                    timestamp: b.manual_debt_date || b.created_at,
+                    name: b.name
+                  }))
+              ]
+                .sort((a, b) => {
+                  const timeA = new Date(a.timestamp || 0).getTime();
+                  const timeB = new Date(b.timestamp || 0).getTime();
+                  return timeB - timeA;
+                })
+                .slice(0, 50)
+                .map((item, idx) => (
+                  <div key={idx} style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: item.type === 'PAYMENT' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {item.type === 'PAYMENT' ? <TrendingUp size={14} style={{ color: 'var(--success)' }} /> : <AlertCircle size={14} style={{ color: 'var(--danger)' }} />}
                       </div>
-                      <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ fontWeight: '800', color: item.type === 'PAYMENT' ? 'var(--success)' : 'white', fontSize: '14px' }}>
-                          {item.type === 'PAYMENT' ? '+' : '-'}{parseFloat(item.amount).toLocaleString()}
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '700' }}>{item.profiles?.name || item.name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                          <CategoryBadge category={item.type === 'PAYMENT' ? (item.category || 'Payment') : item.category} type={item.type} />
+                          <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatDateTimeWithPHT(item.timestamp)}</span>
                         </div>
-                        {!String(item.id).startsWith('initial-') && (
-                          <button className="act-btn danger" onClick={() => handleUndo(item)} title="Undo Transaction" style={{ width: '28px', height: '28px', padding: 0, opacity: 0.4 }}><Trash2 size={12} /></button>
-                        )}
                       </div>
                     </div>
-                  ))}
-              </div>
+                    <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ fontWeight: '800', color: item.type === 'PAYMENT' ? 'var(--success)' : 'white', fontSize: '14px' }}>
+                        {item.type === 'PAYMENT' ? '+' : '-'}{parseFloat(item.amount).toLocaleString()}
+                      </div>
+                      {!String(item.id).startsWith('initial-') && (
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button className="act-btn" onClick={() => {
+                            if (item.type === 'PAYMENT') {
+                              setEditingPayment(item);
+                              setIsPaymentModalOpen(true);
+                            } else {
+                              setEditingExpense(item);
+                              setIsExpenseModalOpen(true);
+                            }
+                          }} title="Edit Transaction"><Edit size={12} /></button>
+                          <button className="act-btn danger" onClick={() => handleUndo(item)} title="Undo Transaction"><Trash2 size={12} /></button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
             </div>
-          )}
+          </div>
         </Section>
       </div>
 
-      <ExpenseModal isOpen={isExpenseModalOpen} onClose={() => setIsExpenseModalOpen(false)} boarders={boarders} onSave={handleRefresh} />
-      <UserModal isOpen={isUserModalOpen} onClose={() => setIsUserModalOpen(false)} editingUser={editingItem} onSave={handleRefresh} />
-      <PaymentModal isOpen={isPaymentModalOpen} onClose={() => setIsPaymentModalOpen(false)} boarders={boarders} expenses={expenses} onSave={handleRefresh} />
-      <HistoryModal isOpen={isHistoryModalOpen} onClose={() => setIsHistoryModalOpen(false)} user={selectedResident} />
+      {/* SYSTEM MAINTENANCE BAR */}
+      <Section title="System Maintenance" icon={Settings2}>
+        <div style={{ 
+          background: 'rgba(244, 63, 94, 0.02)', 
+          border: '1px solid rgba(244, 63, 94, 0.1)', 
+          borderRadius: '16px', 
+          padding: '24px', 
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '24px'
+        }}>
+          <div>
+            <span style={{ fontSize: '14px', fontWeight: '900', color: 'var(--danger)', letterSpacing: '0.05em' }}>CRITICAL UTILITIES</span>
+            <p style={{ fontSize: '11px', color: 'var(--text2)', marginTop: '2px' }}>Dangerous operations and data repair</p>
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button className="btn btn-secondary" onClick={handleUndoLastAction}>
+              <RotateCcw size={16} /> <span>Undo Last</span>
+            </button>
+            <button className="btn btn-secondary" onClick={handleRepair} disabled={isRepairing}>
+              {isRepairing ? <RefreshCw size={16} className="animate-spin" /> : <Shield size={16} />}
+              <span>{isRepairing ? 'Repairing...' : 'Repair DB'}</span>
+            </button>
+            <button className="btn btn-danger" onClick={handleGlobalReset}>
+              <Trash2 size={16} /> <span>Wipe All Data</span>
+            </button>
+          </div>
+        </div>
+      </Section>
+
+      <ExpenseModal 
+        isOpen={isExpenseModalOpen} 
+        onClose={() => { setIsExpenseModalOpen(false); setEditingExpense(null); }} 
+        boarders={boarders} 
+        onSave={handleRefresh} 
+        editingExpense={editingExpense} 
+      />
+      <UserModal 
+        isOpen={isUserModalOpen} 
+        onClose={() => { setIsUserModalOpen(false); setEditingItem(null); }} 
+        editingUser={editingItem} 
+        onSave={handleRefresh} 
+      />
+      <PaymentModal 
+        isOpen={isPaymentModalOpen} 
+        onClose={() => { setIsPaymentModalOpen(false); setEditingPayment(null); }} 
+        boarders={boarders} 
+        expenses={expenses} 
+        onSave={handleRefresh} 
+        editingPayment={editingPayment} 
+      />
+      <HistoryModal 
+        isOpen={isHistoryModalOpen} 
+        onClose={() => setIsHistoryModalOpen(false)} 
+        user={selectedResident} 
+      />
       
       <ConfirmationModal 
         isOpen={confirmConfig.isOpen} onClose={closeConfirm} onConfirm={confirmConfig.onConfirm}

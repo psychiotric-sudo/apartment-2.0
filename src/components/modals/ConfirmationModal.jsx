@@ -6,7 +6,17 @@ const ConfirmationModal = ({
   confirmText = "Proceed", strict = false, danger = false
 }) => {
   const [inputValue, setInputValue] = useState('');
-  useEffect(() => { if (isOpen) setInputValue(''); }, [isOpen]);
+  
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('modal-open');
+      setInputValue('');
+    } else {
+      document.body.classList.remove('modal-open');
+    }
+    return () => document.body.classList.remove('modal-open');
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleConfirm = () => {

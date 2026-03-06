@@ -49,7 +49,7 @@ AptManager is a high-end, responsive web application designed to streamline apar
 ## 🚀 Getting Started
 
 ### 1. Clone the repository
-
+rom
 ```bash
 C
 cd apartment-dashboard

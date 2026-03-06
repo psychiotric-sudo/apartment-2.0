@@ -4,7 +4,13 @@ import { X, Calendar, ArrowUpCircle, ArrowDownCircle, RefreshCw, Clock, CheckCir
 import { formatCurrency, formatDate, getMonthName, formatDateTimeWithPHT } from '../../utils/formatters';
 
 const HistoryModal = ({ isOpen, onClose, user }) => {
-  const [history, setHistory] = useState({});
+  useEffect(() => {
+    if (isOpen) document.body.classList.add('modal-open');
+    else document.body.classList.remove('modal-open');
+    return () => document.body.classList.remove('modal-open');
+  }, [isOpen]);
+
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedMonths, setExpandedMonths] = useState({});
 

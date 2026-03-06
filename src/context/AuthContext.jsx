@@ -25,7 +25,8 @@ export const AuthProvider = ({ children }) => {
     } catch (e) { return null; }
   });
 
-  const [loading, setLoading] = useState(!session || (session && !user));
+  // Start with loading true only if we have a session but no user yet
+  const [loading, setLoading] = useState(!!session && !user);
   const [telemetry, setTelemetry] = useState([]);
 
   const log = (msg, data = '', type = 'info') => {
@@ -88,27 +89,20 @@ export const AuthProvider = ({ children }) => {
       
       if (newSession) {
         setSession(newSession);
+        // Instant profile fetch if session is new or user is missing
         if (!user || user.id !== newSession.user.id) {
-          await fetchProfile(newSession.user.id, false);
-        } else {
-          fetchProfile(newSession.user.id, true);
-          setLoading(false);
+          fetchProfile(newSession.user.id, false);
+        } else if (event === 'SIGNED_IN') {
+          fetchProfile(newSession.user.id, false);
         }
       } else {
         handleClearAuth();
       }
     });
 
-    const timeout = setTimeout(() => {
-      if (isMounted && loading) {
-        setLoading(false);
-      }
-    }, 2000);
-
     return () => {
       isMounted = false;
       subscription?.unsubscribe();
-      clearTimeout(timeout);
     };
   }, [user]);
 
@@ -123,6 +117,11 @@ export const AuthProvider = ({ children }) => {
     const email = `${username.trim().toLowerCase()}@local.app`;
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    
+    // Manually trigger profile fetch for faster login feedback
+    if (data.user) {
+      await fetchProfile(data.user.id, false);
+    }
     return data;
   };
 
@@ -133,7 +132,6 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    setLoading(true);
     await supabase.auth.signOut();
     localStorage.clear();
     handleClearAuth();

@@ -2,6 +2,12 @@ import React from "react";
 import { X, Facebook, MessageCircle, Instagram, Sparkles } from "lucide-react";
 
 const DeveloperModal = ({ isOpen, onClose }) => {
+  React.useEffect(() => {
+    if (isOpen) document.body.classList.add('modal-open');
+    else document.body.classList.remove('modal-open');
+    return () => document.body.classList.remove('modal-open');
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const hobbies = [
@@ -14,7 +20,7 @@ const DeveloperModal = ({ isOpen, onClose }) => {
     <div
       className={`modal-overlay active`}
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      style={{ zIndex: 3000 }}>
+      style={{ zIndex: 99999 }}>
       <div
         className="modal"
         style={{

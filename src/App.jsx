@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext';
 import { validateConfig } from './config';
 import AppLayout from './layouts/AppLayout';
 import LoginPage from './pages/LoginPage';
@@ -10,8 +11,19 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 import DataValidator from './components/common/DataValidator';
 
 const PublicRoute = ({ children }) => {
-  const { session } = useAuth();
+  const { session, loading } = useAuth();
+  if (loading && !session) return null;
   return session ? <Navigate to="/dashboard" replace /> : children;
+};
+
+const RootRedirect = () => {
+  const { session, loading } = useAuth();
+  if (loading) return (
+    <div style={{ background: '#050608', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="animate-spin" style={{ width: '24px', height: '24px', border: '2px solid #1a1b1e', borderTopColor: '#3b82f6', borderRadius: '50%' }} />
+    </div>
+  );
+  return session ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
 };
 
 function App() {
@@ -28,17 +40,19 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <DataValidator />
-        <Routes>
-          <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-            <Route path="/dashboard" element={<RoleBasedRouter />} />
-          </Route>
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </AuthProvider>
+      <NotificationProvider>
+        <AuthProvider>
+          <DataValidator />
+          <Routes>
+            <Route path="/" element={<RootRedirect />} />
+            <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+            <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+              <Route path="/dashboard" element={<RoleBasedRouter />} />
+            </Route>
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </AuthProvider>
+      </NotificationProvider>
     </ErrorBoundary>
   );
 }
