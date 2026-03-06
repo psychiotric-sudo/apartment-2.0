@@ -11,7 +11,7 @@ const ExpenseModal = ({ isOpen, onClose, boarders, onSave, editingExpense = null
   const { showToast } = useNotify();
   const [formData, setFormData] = useState({
     category: 'Meals/Food', amount: '0', description: '',
-    due_date: new Date().toISOString().split('T')[0],
+    due_date: new Date().toLocaleDateString('sv'),
     participants: [], rounding: ROUNDING_MODES.UP_5
   });
   const [loading, setLoading] = useState(false);
@@ -33,7 +33,7 @@ const ExpenseModal = ({ isOpen, onClose, boarders, onSave, editingExpense = null
     } else {
       setFormData({
         category: 'Meals/Food', amount: '0', description: '',
-        due_date: new Date().toISOString().split('T')[0],
+        due_date: new Date().toLocaleDateString('sv'),
         participants: boarders.map(b => b.id), rounding: ROUNDING_MODES.UP_5
       });
     }

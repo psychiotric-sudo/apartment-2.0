@@ -399,8 +399,8 @@ const AdminDashboard = () => {
           <div className="glass-card" style={{ padding: '0', overflow: 'hidden' }}>
             <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
               {[
-                ...expenses.map(e => ({...e, type: 'DEBT', timestamp: e.due_date || e.created_at})), 
-                ...payments.map(p => ({...p, type: 'PAYMENT', timestamp: p.date || p.created_at})),
+                ...expenses.map(e => ({...e, type: 'DEBT', displayTimestamp: e.due_date, sortTimestamp: e.created_at})), 
+                ...payments.map(p => ({...p, type: 'PAYMENT', displayTimestamp: p.date, sortTimestamp: p.created_at})),
                 ...boarders
                   .filter(b => parseFloat(b.manual_debt || 0) > 0)
                   .map(b => ({
@@ -409,13 +409,14 @@ const AdminDashboard = () => {
                     category: 'Initial Balance',
                     amount: b.manual_debt,
                     created_at: b.manual_debt_date || b.created_at,
-                    timestamp: b.manual_debt_date || b.created_at,
+                    displayTimestamp: b.manual_debt_date || b.created_at,
+                    sortTimestamp: b.manual_debt_date || b.created_at,
                     name: b.name
                   }))
               ]
                 .sort((a, b) => {
-                  const timeA = new Date(a.timestamp || 0).getTime();
-                  const timeB = new Date(b.timestamp || 0).getTime();
+                  const timeA = new Date(a.sortTimestamp || 0).getTime();
+                  const timeB = new Date(b.sortTimestamp || 0).getTime();
                   return timeB - timeA;
                 })
                 .slice(0, 50)
@@ -429,7 +430,7 @@ const AdminDashboard = () => {
                         <div style={{ fontSize: '13px', fontWeight: '700' }}>{item.profiles?.name || item.name}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                           <CategoryBadge category={item.type === 'PAYMENT' ? (item.category || 'Payment') : item.category} type={item.type} />
-                          <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatDateTimeWithPHT(item.timestamp)}</span>
+                          <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatDateTimeWithPHT(item.displayTimestamp || item.sortTimestamp)}</span>
                         </div>
                       </div>
                     </div>

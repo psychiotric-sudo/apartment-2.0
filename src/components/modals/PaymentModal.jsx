@@ -11,7 +11,7 @@ const PaymentModal = ({ isOpen, onClose, boarders, expenses, onSave, editingPaym
   const { showToast } = useNotify();
   const [formData, setFormData] = useState({ 
     boarder_id: '', expense_id: '', amount: '', method: 'Cash',
-    category: '', date: new Date().toISOString().split('T')[0]
+    category: '', date: new Date().toLocaleDateString('sv') // YYYY-MM-DD format
   });
   const [loading, setLoading] = useState(false);
 
@@ -32,7 +32,7 @@ const PaymentModal = ({ isOpen, onClose, boarders, expenses, onSave, editingPaym
     } else {
       setFormData({ 
         boarder_id: '', expense_id: '', amount: '', method: 'Cash',
-        category: '', date: new Date().toISOString().split('T')[0]
+        category: '', date: new Date().toLocaleDateString('sv')
       });
     }
   }, [editingPayment, isOpen]);
