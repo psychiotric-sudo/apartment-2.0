@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { useNotify } from '../../context/NotificationContext';
-import { formatCurrency, formatShortDate, formatDateTimeWithPHT } from '../../utils/formatters';
+import { formatCurrency, formatShortDate, formatDateTimeWithPHT, formatActivityDateTime } from '../../utils/formatters';
 import { 
   Users as UsersIcon, AlertCircle, CreditCard, PlusCircle, 
   UserPlus, Edit, Trash2, RefreshCw, List, ReceiptText, Shield, Zap, TrendingUp, Search, History, RotateCcw, Crown, Layers, Settings2
