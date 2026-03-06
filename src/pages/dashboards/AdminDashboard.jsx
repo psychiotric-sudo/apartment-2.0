@@ -430,7 +430,7 @@ const AdminDashboard = () => {
                         <div style={{ fontSize: '13px', fontWeight: '700' }}>{item.profiles?.name || item.name}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                           <CategoryBadge category={item.type === 'PAYMENT' ? (item.category || 'Payment') : item.category} type={item.type} />
-                          <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatDateTimeWithPHT(item.displayTimestamp || item.sortTimestamp)}</span>
+                          <span style={{ fontSize: '10px', opacity: 0.5 }}>{formatActivityDateTime(item.displayTimestamp, item.sortTimestamp)}</span>
                         </div>
                       </div>
                     </div>
